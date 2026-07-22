@@ -78,7 +78,9 @@
 
 
 import type { Request, Response } from "express";
-const express = require('express');
+import express from "express";
+import { validateScore, validateScoreMetadata } from "./middleware";
+import { z } from "zod";
 
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, DeleteCommand } = require("@aws-sdk/lib-dynamodb");
@@ -89,13 +91,20 @@ const dynamo_client = new DynamoDBClient({
 
 const dynamo_document_client = DynamoDBDocumentClient.from(dynamo_client);
 
+
+
+
+
 const app = express();
+app.use(express.json());
 
 app.get("/", (req: Request, res: Response) => res.send("hello world"));
 
-app.post("/scores", (req: Request, res: Response) => {
+app.post("/scores", validateScore, validateScoreMetadata, (req: Request, res: Response) => {
     
 });
+
+app.post("/", )
 
 
 
