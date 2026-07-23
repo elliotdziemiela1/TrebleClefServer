@@ -9,8 +9,6 @@
 //
 // Main Table:
 //  Partition key: user_id : "S"
-//  // each user's first score starts with score_id = 1. Each subsequent score increments this, so theres
-//  // no need for a LSI with sort key for time created.
 //  Sort Key: #SCORE<score_id>#META : "S"
 //  Second Sort Key format: #SCORE<score_id>#DATA
 //  Third Sort Key formal: #PROFILE
@@ -79,8 +77,13 @@
 
 import type { Request, Response } from "express";
 import express from "express";
-import { validateScore, validateScoreMetadata } from "./middleware";
+import { validateScore, validateScoreMetadata, validateUserID } from "./middleware";
 import { z } from "zod";
+import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
+import { TransactWriteItem } from "@aws-sdk/client-dynamodb";
+
+const TABLE_NAME = "TrebleClef"
+
 
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, DeleteCommand } = require("@aws-sdk/lib-dynamodb");
@@ -100,11 +103,74 @@ app.use(express.json());
 
 app.get("/", (req: Request, res: Response) => res.send("hello world"));
 
-app.post("/scores", validateScore, validateScoreMetadata, (req: Request, res: Response) => {
-    
-});
+app.post("/scores", validateUserID, validateScore, validateScoreMetadata, async (req: Request, res: Response) => {
+    if (!req.body.scoreID){
+        return res.status(400).json({
+            error: "Missing scoreID."
+        })
+    }
+    // try {
+    //     dynamo_document_client.send(new PutCommand({
+    //         TableName: TABLE_NAME,
+    //         Item: {
+    //             User_id: req.body.userID,
+    //             Item_id: `#SCORE${req.body.scoreID}#META`,
+    //             ...res.locals.parsedScoreMetadata
+    //         }
+    //     }));
+    // } catch (error) {
 
-app.post("/", )
+    // }
+    // try {
+    //     dynamo_document_client.send(new PutCommand({
+    //         TableName: TABLE_NAME,
+    //         Item: {
+    //             User_id: req.body.userID,
+    //             Item_id: `#SCORE${req.body.scoreID}#DATA`,
+    //             ...res.locals.parsedScore
+    //         }
+    //     }))
+    // } catch (error) {
+        
+    // }
+
+    try {
+        await dynamo_document_client.send(new TransactWriteCommand({
+            "TransactItems": [
+                { 
+                    Put: {
+                        TableName: TABLE_NAME,
+                        Item: {
+                            User_id: req.body.userID,
+                            Item_id: `#SCORE${req.body.scoreID}#META`,
+                            ...res.locals.parsedScoreMetadata
+                        }
+                    },
+                },
+                { 
+                    Put: {
+                        TableName: TABLE_NAME,
+                        Item: {
+                            User_id: req.body.userID,
+                            Item_id: `#SCORE${req.body.scoreID}#DATA`,
+                            ...res.locals.parsedScore
+                        }
+                    },
+                }
+            ]
+        }))
+    } catch (error) {
+        console.error("Error saving score to DynamoDB:", error);
+        return res.status(500).json({
+            error: "Error saving score to database.",
+            details: error
+        })
+    }
+
+    return res.status(200).json({
+        message: "Score saved successfully."
+    })
+});
 
 
 

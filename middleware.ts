@@ -9,18 +9,26 @@ const PRIMARY_INSTRUMENT_MAX_SIZE = 25
 
 
 
-
+export function validateUserID(req: Request, res: Response, next: Function){
+    if (!req.body.userID){
+        return res.status(400).json({
+            error: "Missing userID."
+        })
+    } else {
+        next();
+    }
+}
 
 export const ScoreSchema = z.object({
-    measures: z.object({
-        notes: z.array(z.object({
-            keys: z.array(z.string()),
-            duration: z.union(NOTE_DURATIONS.map((d) => z.literal(d))),
-            type: z.string().optional(),
-            color: z.string().optional()
+    Masures: z.object({
+        Notes: z.array(z.object({
+            Keys: z.array(z.string()),
+            Duration: z.union(NOTE_DURATIONS.map((d) => z.literal(d))),
+            Type: z.string().optional(),
+            Color: z.string().optional()
         }))
     }),
-    clef: z.union([z.literal("treble"), z.literal("bass")])
+    Clef: z.union([z.literal("treble"), z.literal("bass")])
 })
 export type ScoreObject = z.infer<typeof ScoreSchema>;
 
@@ -41,20 +49,20 @@ export function validateScore(req: Request, res: Response, next: Function){
 
 
 const ScoreMetadataSchema = z.object({
-    name: z.string().min(1).max(SCORE_NAME_MAX_SIZE),
-    authorName: z.string().min(1).max(USERNAME_MAX_SIZE),
+    Name: z.string().min(1).max(SCORE_NAME_MAX_SIZE),
+    Author_name: z.string().min(1).max(USERNAME_MAX_SIZE),
     // Requires exact UTC format: YYYY-MM-DDTHH:mm:ssZ
-    dateTimeCreated: z.iso.datetime(),
-    dateTimeLastEdited: z.iso.datetime(),
-    primaryGenre: z.string().min(1).max(PRIMARY_GENRE_MAX_SIZE),
-    secondaryGenres: z.array(z.string()).optional(),
-    numberOfRatings: z.number().int().nonnegative(),
-    totalNumberOfStars: z.number().int().nonnegative(),
-    popularityScore: z.number().nonnegative(),
-    totalMeasures: z.number().int().positive(),
-    bpm: z.number().int().positive(),
-    primaryInstrument: z.string().min(1).max(PRIMARY_INSTRUMENT_MAX_SIZE),
-    secondaryInstruments: z.array(z.string()).optional(),
+    Date_time_created: z.iso.datetime(),
+    Date_time_last_edited: z.iso.datetime(),
+    Primary_genre: z.string().min(1).max(PRIMARY_GENRE_MAX_SIZE),
+    Secondary_genres: z.array(z.string()).optional(),
+    Number_of_ratings: z.number().int().nonnegative(),
+    Total_number_of_stars: z.number().int().nonnegative(),
+    Popularity_score: z.number().nonnegative(),
+    Total_measures: z.number().int().positive(),
+    BPM: z.number().int().positive(),
+    Primary_instrument: z.string().min(1).max(PRIMARY_INSTRUMENT_MAX_SIZE),
+    Secondary_instruments: z.array(z.string()).optional(),
 })
 export type ScoreMetaDataObject = z.infer<typeof ScoreMetadataSchema>
 
