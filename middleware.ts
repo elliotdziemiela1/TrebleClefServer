@@ -20,15 +20,15 @@ export function validateUserID(req: Request, res: Response, next: Function){
 }
 
 export const ScoreSchema = z.object({
-    Masures: z.object({
-        Notes: z.array(z.object({
-            Keys: z.array(z.string()),
-            Duration: z.union(NOTE_DURATIONS.map((d) => z.literal(d))),
-            Type: z.string().optional(),
-            Color: z.string().optional()
+    measures: z.array(z.object({
+        notes: z.array(z.object({
+            keys: z.array(z.string()),
+            duration: z.union(NOTE_DURATIONS.map((d) => z.literal(d))),
+            type: z.string().optional(),
+            color: z.string().optional()
         }))
-    }),
-    Clef: z.union([z.literal("treble"), z.literal("bass")])
+    })),
+    clef: z.union([z.literal("treble"), z.literal("bass")])
 })
 export type ScoreObject = z.infer<typeof ScoreSchema>;
 

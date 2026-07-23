@@ -82,7 +82,7 @@ import { z } from "zod";
 import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import { TransactWriteItem } from "@aws-sdk/client-dynamodb";
 
-const TABLE_NAME = "TrebleClef"
+const TABLE_NAME = "Treble_Clef"
 
 
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
@@ -93,8 +93,6 @@ const dynamo_client = new DynamoDBClient({
 })
 
 const dynamo_document_client = DynamoDBDocumentClient.from(dynamo_client);
-
-
 
 
 
@@ -109,30 +107,6 @@ app.post("/scores", validateUserID, validateScore, validateScoreMetadata, async 
             error: "Missing scoreID."
         })
     }
-    // try {
-    //     dynamo_document_client.send(new PutCommand({
-    //         TableName: TABLE_NAME,
-    //         Item: {
-    //             User_id: req.body.userID,
-    //             Item_id: `#SCORE${req.body.scoreID}#META`,
-    //             ...res.locals.parsedScoreMetadata
-    //         }
-    //     }));
-    // } catch (error) {
-
-    // }
-    // try {
-    //     dynamo_document_client.send(new PutCommand({
-    //         TableName: TABLE_NAME,
-    //         Item: {
-    //             User_id: req.body.userID,
-    //             Item_id: `#SCORE${req.body.scoreID}#DATA`,
-    //             ...res.locals.parsedScore
-    //         }
-    //     }))
-    // } catch (error) {
-        
-    // }
 
     try {
         await dynamo_document_client.send(new TransactWriteCommand({
