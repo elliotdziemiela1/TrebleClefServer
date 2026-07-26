@@ -88,9 +88,20 @@ const TABLE_NAME = "Treble_Clef"
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, DeleteCommand } = require("@aws-sdk/lib-dynamodb");
 
-const dynamo_client = new DynamoDBClient({
-    region: process.env.AWS_REGION || "us-east-1",
-})
+const dynamo_client = new DynamoDBClient(process.env.NODE_ENV == "production" ? 
+    {
+        region: process.env.MY_AWS_REGION,
+        credentials: {
+            accessKeyId: process.env.MY_AWS_ACCESS_KEY_ID!,
+            secretAccessKey: process.env.MY_AWS_SECRET_ACCESS_KEY!,
+        }
+    } :
+    {
+        region: process.env.MY_AWS_REGION,
+    } 
+)
+
+
 
 const dynamo_document_client = DynamoDBDocumentClient.from(dynamo_client);
 
@@ -98,10 +109,11 @@ const dynamo_document_client = DynamoDBDocumentClient.from(dynamo_client);
 
 const app = express();
 app.use(express.json());
+app.use(validateUserID);
 
 app.get("/", (req: Request, res: Response) => res.send("hello world"));
 
-app.post("/scores", validateUserID, validateScore, validateScoreMetadata, async (req: Request, res: Response) => {
+app.post("/scores", validateScore, validateScoreMetadata, async (req: Request, res: Response) => {
     if (!req.body.scoreID){
         return res.status(400).json({
             error: "Missing scoreID."
@@ -145,6 +157,16 @@ app.post("/scores", validateUserID, validateScore, validateScoreMetadata, async 
         message: "Score saved successfully."
     })
 });
+
+app.get("/test", (req : Request, res: Response) => {
+    return res.status(200).json({
+        message: "Test endpoint working."
+    });
+});
+
+// app.delete("/scores:scoreID", async (req: Request, res: Response) => {
+    
+// })
 
 
 
