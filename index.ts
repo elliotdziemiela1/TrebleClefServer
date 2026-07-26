@@ -88,18 +88,39 @@ const TABLE_NAME = "Treble_Clef"
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, DeleteCommand } = require("@aws-sdk/lib-dynamodb");
 
-const dynamo_client = new DynamoDBClient(process.env.NODE_ENV == "production" ? 
-    {
-        region: process.env.MY_AWS_REGION,
-        credentials: {
-            accessKeyId: process.env.MY_AWS_ACCESS_KEY_ID!,
-            secretAccessKey: process.env.MY_AWS_SECRET_ACCESS_KEY!,
-        }
-    } :
-    {
-        region: process.env.MY_AWS_REGION,
-    } 
-)
+const awsRegion = process.env.MY_AWS_REGION?.trim();
+const awsAccessKeyId = process.env.MY_AWS_ACCESS_KEY_ID?.trim();
+const awsSecretAccessKey = process.env.MY_AWS_SECRET_ACCESS_KEY?.trim();
+const awsSessionToken = process.env.MY_AWS_SESSION_TOKEN?.trim();
+
+if (!awsRegion) {
+    throw new Error("Missing MY_AWS_REGION environment variable.");
+}
+
+const dynamoClientConfig: {
+    region: string;
+    credentials?: {
+        accessKeyId: string;
+        secretAccessKey: string;
+        sessionToken?: string;
+    };
+} = {
+    region: awsRegion,
+};
+
+if (process.env.NODE_ENV === "production") {
+    if (!awsAccessKeyId || !awsSecretAccessKey) {
+        throw new Error("Missing MY_AWS_ACCESS_KEY_ID or MY_AWS_SECRET_ACCESS_KEY in production.");
+    }
+
+    dynamoClientConfig.credentials = {
+        accessKeyId: awsAccessKeyId,
+        secretAccessKey: awsSecretAccessKey,
+        ...(awsSessionToken ? { sessionToken: awsSessionToken } : {}),
+    };
+}
+
+const dynamo_client = new DynamoDBClient(dynamoClientConfig)
 
 
 
