@@ -1,5 +1,6 @@
 import express, { Request, Response } from "express";
 import { z } from "zod";
+import { CognitoJwtVerifier } from "aws-jwt-verify";
 
 const NOTE_DURATIONS = [1,2,4,8,16,32]
 const USERNAME_MAX_SIZE = 25
@@ -7,15 +8,32 @@ const SCORE_NAME_MAX_SIZE = 25
 const PRIMARY_GENRE_MAX_SIZE = 25
 const PRIMARY_INSTRUMENT_MAX_SIZE = 25
 
+const cognitoVerifier = CognitoJwtVerifier.create({
+    userPoolId: process.env.COGNITO_USER_POOL_ID!,
+    tokenUse: "access",
+    clientId: process.env.COGNITO_CLIENT_ID!,
+});
 
-
-export function validateUserID(req: Request, res: Response, next: Function){
-    if (!req.body.userID){
-        return res.status(400).json({
-            error: "Missing userID."
+// Verifies the caller's Cognito access token and derives the user id (sub) from it,
+// rather than trusting whatever userID the client claims in the request body.
+export async function verifyAuth(req: Request, res: Response, next: Function){
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")){
+        return res.status(401).json({
+            error: "Missing bearer token."
         })
-    } else {
+    }
+
+    const token = authHeader.slice("Bearer ".length);
+
+    try {
+        const payload = await cognitoVerifier.verify(token);
+        res.locals.userId = payload.sub;
         next();
+    } catch (error) {
+        return res.status(401).json({
+            error: "Invalid or expired token."
+        })
     }
 }
 

@@ -79,7 +79,7 @@
 
 import type { Request, Response } from "express";
 import express from "express";
-import { validateScore, validateScoreMetadata, validateUserID } from "./middleware";
+import { validateScore, validateScoreMetadata, verifyAuth } from "./middleware";
 import { z } from "zod";
 import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import { TransactWriteItem } from "@aws-sdk/client-dynamodb";
@@ -110,7 +110,7 @@ const dynamo_document_client = DynamoDBDocumentClient.from(dynamo_client);
 
 const app = express();
 app.use(express.json());
-app.use(validateUserID);
+app.use(verifyAuth);
 
 app.get("/", (req: Request, res: Response) => res.send("hello world"));
 
@@ -124,21 +124,21 @@ app.post("/scores", validateScore, validateScoreMetadata, async (req: Request, r
     try {
         await dynamo_document_client.send(new TransactWriteCommand({
             "TransactItems": [
-                { 
+                {
                     Put: {
                         TableName: TABLE_NAME,
                         Item: {
-                            User_id: req.body.userID,
+                            User_id: res.locals.userId,
                             Item_id: `#SCORE${req.body.scoreID}#META`,
                             ...res.locals.parsedScoreMetadata
                         }
                     },
                 },
-                { 
+                {
                     Put: {
                         TableName: TABLE_NAME,
                         Item: {
-                            User_id: req.body.userID,
+                            User_id: res.locals.userId,
                             Item_id: `#SCORE${req.body.scoreID}#DATA`,
                             ...res.locals.parsedScore
                         }
