@@ -3,6 +3,8 @@
 // For scores we want to be able to fetch the metadata for a score for search results, but not the massive
 // score itself. For that we have 2 sort key formats in the table: Meta and Data. For user profiles, we have
 // the Profile sort key format. 
+// Meta and Data entries are linked via their item ids. The item ids for the data and meta entries for a particular 
+// score will be the same. Ex: #SCORE1234#META and #SCORE1234#DATA
 // We also want to view popular scores for a genre. For that we need a GSI with PK = primary genre, and SK = popularity
 // We also want to view popular scores for an instrument. For that we need a GSI with PK = primary instrument,
 // and SK = popularity
@@ -93,10 +95,6 @@ const awsAccessKeyId = process.env.MY_AWS_ACCESS_KEY_ID?.trim();
 const awsSecretAccessKey = process.env.MY_AWS_SECRET_ACCESS_KEY?.trim();
 const awsSessionToken = process.env.MY_AWS_SESSION_TOKEN?.trim();
 
-if (!awsRegion) {
-    throw new Error("Missing MY_AWS_REGION environment variable.");
-}
-
 const dynamoClientConfig = {
     region: awsRegion,
     credentials: {
@@ -106,33 +104,8 @@ const dynamoClientConfig = {
     }
 }
 
-// if (process.env.NODE_ENV === "production") {
-//     if (!awsAccessKeyId || !awsSecretAccessKey) {
-//         throw new Error("Missing MY_AWS_ACCESS_KEY_ID or MY_AWS_SECRET_ACCESS_KEY in production.");
-//     }
-
-//     dynamoClientConfig.credentials = {
-//         accessKeyId: awsAccessKeyId,
-//         secretAccessKey: awsSecretAccessKey,
-//         ...(awsSessionToken ? { sessionToken: awsSessionToken } : {}),
-//     };
-// } else {
-//     if (!awsAccessKeyId || !awsSecretAccessKey) {
-//         console.warn("Missing MY_AWS_ACCESS_KEY_ID or MY_AWS_SECRET_ACCESS_KEY in development. Using default credentials.");
-//     } else {
-//         dynamoClientConfig.credentials = {
-//             accessKeyId: awsAccessKeyId,
-//             secretAccessKey: awsSecretAccessKey,
-//             ...(awsSessionToken ? { sessionToken: awsSessionToken } : {}),
-//         };
-//     }
-// }
-
-
 const dynamo_client = new DynamoDBClient(dynamoClientConfig)
-
 const dynamo_document_client = DynamoDBDocumentClient.from(dynamo_client);
-
 
 
 const app = express();
@@ -195,7 +168,6 @@ app.get("/test", (req : Request, res: Response) => {
 // app.delete("/scores:scoreID", async (req: Request, res: Response) => {
     
 // })
-
 
 
 app.listen(3000, () => console.log("Server is up on port 3000"));
