@@ -97,32 +97,39 @@ if (!awsRegion) {
     throw new Error("Missing MY_AWS_REGION environment variable.");
 }
 
-const dynamoClientConfig: {
-    region: string;
-    credentials?: {
-        accessKeyId: string;
-        secretAccessKey: string;
-        sessionToken?: string;
-    };
-} = {
+const dynamoClientConfig = {
     region: awsRegion,
-};
-
-if (process.env.NODE_ENV === "production") {
-    if (!awsAccessKeyId || !awsSecretAccessKey) {
-        throw new Error("Missing MY_AWS_ACCESS_KEY_ID or MY_AWS_SECRET_ACCESS_KEY in production.");
-    }
-
-    dynamoClientConfig.credentials = {
-        accessKeyId: awsAccessKeyId,
-        secretAccessKey: awsSecretAccessKey,
+    credentials: {
+        accessKeyId: awsAccessKeyId!,
+        secretAccessKey: awsSecretAccessKey!,
         ...(awsSessionToken ? { sessionToken: awsSessionToken } : {}),
-    };
+    }
 }
 
+// if (process.env.NODE_ENV === "production") {
+//     if (!awsAccessKeyId || !awsSecretAccessKey) {
+//         throw new Error("Missing MY_AWS_ACCESS_KEY_ID or MY_AWS_SECRET_ACCESS_KEY in production.");
+//     }
+
+//     dynamoClientConfig.credentials = {
+//         accessKeyId: awsAccessKeyId,
+//         secretAccessKey: awsSecretAccessKey,
+//         ...(awsSessionToken ? { sessionToken: awsSessionToken } : {}),
+//     };
+// } else {
+//     if (!awsAccessKeyId || !awsSecretAccessKey) {
+//         console.warn("Missing MY_AWS_ACCESS_KEY_ID or MY_AWS_SECRET_ACCESS_KEY in development. Using default credentials.");
+//     } else {
+//         dynamoClientConfig.credentials = {
+//             accessKeyId: awsAccessKeyId,
+//             secretAccessKey: awsSecretAccessKey,
+//             ...(awsSessionToken ? { sessionToken: awsSessionToken } : {}),
+//         };
+//     }
+// }
+
+
 const dynamo_client = new DynamoDBClient(dynamoClientConfig)
-
-
 
 const dynamo_document_client = DynamoDBDocumentClient.from(dynamo_client);
 
