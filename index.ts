@@ -81,7 +81,7 @@
 
 import type { Request, Response } from "express";
 import express from "express";
-import { validateScore, validateScoreMetadata, verifyAuth } from "./middleware";
+import { validateScore, validateScoreMetadata, verifyAuth } from "./trebleClefMiddleware";
 import { z } from "zod";
 import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import { TransactWriteItem } from "@aws-sdk/client-dynamodb";
