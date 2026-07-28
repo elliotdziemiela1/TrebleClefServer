@@ -17,6 +17,8 @@
 //  Second Sort Key format: #SCORE<score_id>#DATA
 //  Third Sort Key formal: #PROFILE
 //
+//  Second Partition key format: #HANDLE<username> : "S"
+//  Sort Key: #RESERVED : "S"
 //
 //  For #META suffix:
 //  Attribute: Name : "S" // application wont enforce as unique
@@ -112,7 +114,7 @@ const dynamo_document_client = DynamoDBDocumentClient.from(dynamo_client);
 
 const app = express();
 app.use(express.json());
-app.use(verifyAuth);
+// app.use(verifyAuth);
 
 app.get("/", (req: Request, res: Response) => res.send("hello world"));
 
