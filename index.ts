@@ -112,7 +112,7 @@ const dynamo_document_client = DynamoDBDocumentClient.from(dynamo_client);
 
 const app = express();
 app.use(express.json());
-// app.use(verifyAuth);
+app.use(verifyAuth);
 
 app.get("/", (req: Request, res: Response) => res.send("hello world"));
 
