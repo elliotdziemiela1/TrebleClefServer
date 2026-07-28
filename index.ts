@@ -124,7 +124,7 @@ app.post("/scores", validateScore, validateScoreMetadata, async (req: Request, r
     }
 
     try {
-        await dynamo_document_client.send(new TransactWriteCommand({
+        await dynamo_document_client.TransactWriteCommand({
             "TransactItems": [
                 {
                     Put: {
@@ -147,12 +147,11 @@ app.post("/scores", validateScore, validateScoreMetadata, async (req: Request, r
                     },
                 }
             ]
-        }))
-    } catch (error) {
-        console.error("Error saving score to DynamoDB:", error);
-        return res.status(500).json({
-            error: "Error saving score to database.",
-            details: error
+        })
+    } catch (err : any){
+        return res.status(err.$metadata?.httpStatusCode ?? 400).json({
+            error: err.name,
+            message: err.message
         })
     }
 
@@ -166,6 +165,32 @@ app.get("/test", (req : Request, res: Response) => {
         message: "Test endpoint working."
     });
 });
+
+app.get("/username/:name", async (req: Request, res: Response) => {
+    try {
+        const resp = await dynamo_document_client.GetCommand(
+        {
+            TableName : TABLE_NAME,
+            Key : {
+                User_id : `#HANDLE${req.params.name}`,
+                Item_id : "#RESERVED"
+            }
+        });
+        if (!resp.Item){
+            return res.status(404).json({
+                message: "Username not found."
+            })
+        }
+        return res.status(200).json({
+            message: "The username \"" + req.params.name + "\" is in use."
+        })
+    } catch (err : any){
+        return res.status(err.$metadata?.httpStatusCode ?? 400).json({
+            error: err.name,
+            message: err.message
+        })
+    }
+})
 
 // app.delete("/scores:scoreID", async (req: Request, res: Response) => {
     
