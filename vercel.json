@@ -1,7 +1,7 @@
 {
   "functions": {
     "middleware.ts": {
-      "runtime": "node@22.23.1"
+      "runtime": "node@20"
     }
   }
 }
