@@ -1,13 +1,15 @@
 // access patterns:
 //
 // For scores we want to be able to fetch the metadata for a score for search results, but not the massive
-// score itself. For that we have 2 sort key formats in the table: Meta and Data. For user profiles, we have
-// the Profile sort key format. 
+// score itself. For that we have 2 sort key formats in the table: Meta and Data. 
+// For user profiles, we have the Profile sort key format. 
 // Meta and Data entries are linked via their item ids. The item ids for the data and meta entries for a particular 
 // score will be the same. Ex: #SCORE1234#META and #SCORE1234#DATA
 // We also want to view popular scores for a genre. For that we need a GSI with PK = primary genre, and SK = popularity
 // We also want to view popular scores for an instrument. For that we need a GSI with PK = primary instrument,
 // and SK = popularity
+// For usernames, we will add a new PK type #HANDLE<username> with SK #RESERVED that signifies that a username is in use.
+// When deleting a user or changing their username, we will query the table for their handle and delete the item.
 //
 // Main Table:
 //  Partition key: user_id : "S"
