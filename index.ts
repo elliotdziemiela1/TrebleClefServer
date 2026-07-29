@@ -13,9 +13,11 @@
 //
 // Main Table:
 //  Partition key: user_id : "S"
+//  Second PK format: #HANDLE<username>
 //  Sort Key: #SCORE<score_id>#META : "S"
 //  Second Sort Key format: #SCORE<score_id>#DATA
-//  Third Sort Key formal: #PROFILE
+//  Third Sort Key format: #PROFILE
+//  Fourth Sort Key format: #RESERVED // used for #HANDLE pk
 //
 //
 //  For #META suffix:
@@ -84,10 +86,11 @@ import express from "express";
 import { validateScore, validateScoreMetadata, verifyAuth } from "./trebleClefMiddleware";
 import { z } from "zod";
 import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
-import { TransactWriteItem } from "@aws-sdk/client-dynamodb";
+import { ReturnValue, TransactWriteItem } from "@aws-sdk/client-dynamodb";
 
+
+const cors = require("cors")
 const TABLE_NAME = "Treble_Clef"
-
 
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, DeleteCommand } = require("@aws-sdk/lib-dynamodb");
@@ -111,6 +114,7 @@ const dynamo_document_client = DynamoDBDocumentClient.from(dynamo_client);
 
 
 const app = express();
+app.use(cors({origin: ["http://localhost:5173", "https://treble-clef.vercel.app/"], credentials: true}))
 app.use(express.json());
 app.use(verifyAuth);
 
@@ -124,7 +128,7 @@ app.post("/scores", validateScore, validateScoreMetadata, async (req: Request, r
     }
 
     try {
-        await dynamo_document_client.TransactWriteCommand({
+        await dynamo_document_client.send( new TransactWriteCommand({
             "TransactItems": [
                 {
                     Put: {
@@ -147,50 +151,119 @@ app.post("/scores", validateScore, validateScoreMetadata, async (req: Request, r
                     },
                 }
             ]
-        })
+        }))
     } catch (err : any){
-        return res.status(err.$metadata?.httpStatusCode ?? 400).json({
+        return res.status(err.$metadata?.httpStatusCode ?? 500).json({
             error: err.name,
-            message: err.message
+            data: err.message
         })
     }
 
     return res.status(200).json({
-        message: "Score saved successfully."
+        error: null,
+        data: "Score saved successfully."
     })
 });
 
 app.get("/test", (req : Request, res: Response) => {
     return res.status(200).json({
-        message: "Test endpoint working."
+        error: null,
+        data: "Test endpoint working."
     });
 });
 
 app.get("/username/:name", async (req: Request, res: Response) => {
     try {
-        const resp = await dynamo_document_client.GetCommand(
+        const resp = await dynamo_document_client.send(new GetCommand(
         {
             TableName : TABLE_NAME,
             Key : {
                 User_id : `#HANDLE${req.params.name}`,
                 Item_id : "#RESERVED"
             }
-        });
+        }));
         if (!resp.Item){
             return res.status(404).json({
+                result: "false",
                 message: "Username not found."
             })
         }
         return res.status(200).json({
+            result: "true",
             message: "The username \"" + req.params.name + "\" is in use."
         })
     } catch (err : any){
-        return res.status(err.$metadata?.httpStatusCode ?? 400).json({
+        return res.status(err.$metadata?.httpStatusCode ?? 500).json({
             error: err.name,
             message: err.message
         })
     }
 })
+
+app.post("/username/:name", async (req: Request, res: Response) => {
+    try {
+        const resp = await dynamo_document_client.send(new PutCommand(
+        {
+            TableName : TABLE_NAME,
+            Item : {
+                User_id : `#HANDLE${req.params.name}`,
+                Item_id : "#RESERVED"
+            },
+            ConditionExpression: "attribute_not_exists(User_id)"
+        }));
+        return res.status(200).json({
+            error: null,
+            data: "Username successfully reserved."
+        })
+    } catch (err : any){
+        if (err.name == "ConditionalCheckFailedException"){
+            return res.status(400).json({
+                error: err.name,
+                data: "The username \"" + req.params.name + "\" is already in use."
+            })
+        }
+        return res.status(err.$metadata?.httpStatusCode ?? 500).json({
+            error: err.name,
+            data: err.message
+        })
+    }
+})
+
+
+
+//
+// TODO
+// NEED TO ONLY ALLOW DELETION OF USERNAME BY THE ACCOUNT ASSOCIATED WITH IT
+
+
+app.delete("/username/:name", async (req : Request, res : Response) => {
+    return res.status(100).json(
+        {
+            error: null,
+            message: "username deletion currently disabled."
+        }
+    )
+    try {
+        const awsResponse = await dynamo_document_client.send(new DeleteCommand({
+            TableName: TABLE_NAME,
+            Key: {
+                User_id: `#HANDLE${req.params.name}`,
+                Item_id: "#RESERVED"
+            }
+        }))
+        return res.status(200).json({
+            error: null,
+            data: "Successfully deleted handle reservation: " + req.params.name,
+
+        })
+    } catch (err : any) {
+        return res.status(err.$metadata?.httpStatusCode ?? 500).json({
+            error: err.name,
+            data: err.message
+        })
+    }
+})
+
 
 // app.delete("/scores:scoreID", async (req: Request, res: Response) => {
     
