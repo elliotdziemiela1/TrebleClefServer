@@ -41,7 +41,6 @@
 //  
 //  For #PROFILE suffix:
 //  Attribute: Email : "S"
-//  Attribute: EncryptedPassword : "S"
 //  Attribute: Username : "S"
 //  Attribute: NumberOfScores: "N"
 //  Attribute: Bio : "S"
@@ -83,10 +82,10 @@
 
 import type { Request, Response } from "express";
 import express from "express";
-import { validateScore, validateScoreMetadata, verifyAuth } from "./trebleClefMiddleware";
+import { ProfileSchemaType, validateProfile, validateScore, validateScoreMetadata, verifyAuth } from "./trebleClefMiddleware";
 import { z } from "zod";
 import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
-import { ReturnValue, TransactWriteItem } from "@aws-sdk/client-dynamodb";
+import { ReturnValue, ReturnValuesOnConditionCheckFailure, TransactWriteItem } from "@aws-sdk/client-dynamodb";
 
 
 const cors = require("cors")
@@ -120,6 +119,181 @@ app.use(verifyAuth);
 
 app.get("/", (req: Request, res: Response) => res.send("hello world"));
 
+app.get("/test", (req : Request, res: Response) => {
+    return res.status(200).json({
+        error: null,
+        data: "Test endpoint working."
+    });
+});
+
+const updateProfileWithNewHandleTransactionBody = (profile: ProfileSchemaType, userID: string, assertProfileNotExits: boolean) => [
+    {
+        Put: {
+            TableName : TABLE_NAME,
+            Item : {
+                User_id : `#HANDLE${profile.Username}`,
+                Item_id : "#RESERVED"
+            },
+            ConditionExpression: "attribute_not_exists(User_id)"
+        }
+    },
+    {
+        
+        Put: (assertProfileNotExits ? {
+            TableName: TABLE_NAME,
+            Item: {
+                User_id: userID, 
+                Item_id: "#PROFILE",
+                ...profile
+            },
+            ConditionExpression: "attribute_not_exists(User_id)",
+        } : {
+            TableName: TABLE_NAME,
+            Item: {
+                User_id: userID, 
+                Item_id: "#PROFILE",
+                ...profile
+            },
+        })
+    }
+]
+
+// creates a user's profile and reserves their desired username.
+app.post("/users/profile", validateProfile, async (req: Request, res: Response) => {
+    const profile = res.locals.parsedProfile;
+    const userID = res.locals.userId
+    profile.Number_of_scores = 0;
+    
+    try {
+        const response = await dynamo_document_client.send(new TransactWriteCommand({
+            "TransactItems": updateProfileWithNewHandleTransactionBody(profile, userID, true)
+        }))
+        return res.status(200).json({
+            error: null,
+            data: "Successfully created profile."
+        })
+    } catch (err : any) {
+        if (err.name == "TransactionCanceledException"){
+            let messages : string[] = [];
+            // collect the preexistance of item errors into array
+            err.CancellationReasons.forEach((element : any, index : number) => {
+                if (element.Code == "ConditionalCheckFailed"){
+                    if (index === 0)
+                        messages.push("Username is already in use. ")
+                    else if (index === 1)
+                        messages.push("Profile already exists for current user.")
+                }
+            });
+            return res.status(400).json({
+                error: "Preexistance of username or profile",
+                data: messages
+            })
+        } else {
+            return res.status(500).json({
+                error: err.name,
+                data: err.message
+            })
+        }
+    }
+})
+
+// updates a user's profile.
+app.put("/users/profile", validateProfile, async (req: Request, res: Response) => {
+    const profile = res.locals.parsedProfile;
+    const userID = res.locals.userId
+    
+    try {
+        // fetch current profile for this userID in db
+        const getProfileResponse = await dynamo_document_client.send(new GetCommand({
+            TableName: TABLE_NAME,
+            Key: {
+                User_id: userID,
+                Item_id: "#PROFILE"
+            }
+        }))
+        if (!getProfileResponse.Item){
+            return res.status(404).json({
+                error: "Profile not found.",
+                data: "This profile doesn't exist yet."
+            })
+        }
+
+        // if no username update needed, just the profile
+        if (profile.Username === getProfileResponse.Item.Username){
+            // simply put the profile
+            await dynamo_document_client.send(new PutCommand({
+                TableName: TABLE_NAME,
+                Item: {
+                    User_id: userID, 
+                    Item_id: "#PROFILE",
+                    ...profile
+                },
+            }))
+        } else { // else we are updating the username and the profile
+            // check if new username is available
+            const nameCheckResponse = await dynamo_document_client.send(new GetCommand({
+                TableName: TABLE_NAME,
+                Key: {
+                    "User_id": "#HANDLE" + profile.Username,
+                    "Item_id": "#RESERVED"
+                }
+            }))
+            // if the new desired new username is already taken
+            if (!!nameCheckResponse.Item){
+                return res.status(400).json({
+                    error: "Username Taken",
+                    data: "The updated username you provided is already taken"
+                })
+            }
+
+            // delete the old username reservation
+            await dynamo_document_client.send(new DeleteCommand({
+                TableName: TABLE_NAME,
+                Key: {
+                    User_id: "#HANDLE" + getProfileResponse.Item.Username,
+                    Item_id: "#RESERVED"
+                }
+            }))
+            
+            await dynamo_document_client.send(new TransactWriteCommand({
+                "TransactItems": [
+                    // Create new profile and username reservation
+                    ...updateProfileWithNewHandleTransactionBody(profile,userID,false)
+                ]
+            }))
+        }
+        return res.status(200).json({
+            error: null,
+            data: "Successfully updated profile."
+        })
+    } catch (err : any) {
+        // if (err.name == "TransactionCanceledException"){
+        //     let messages : string[] = [];
+        //     // collect the preexistance of item errors into array
+        //     err.CancellationReasons.forEach((element : any, index : number) => {
+        //         if (element.Code == "ConditionalCheckFailed"){
+        //             if (index === 0)
+        //                 messages.push("Username is already in use. ")
+        //             else if (index === 1)
+        //                 messages.push("Profile already exists for this user.")
+        //         }
+        //     });
+        //     return res.status(400).json({
+        //         error: "Preexistance of username or profile",
+        //         data: messages
+        //     })
+        // } 
+        return res.status(500).json({
+            error: err.name,
+            data: err.message
+        })
+    }
+})
+
+// TODO
+// 
+// need to also increment the user's number of scores attribute.
+// Creates a new score entry and a new metadata entry for that score.
 app.post("/scores", validateScore, validateScoreMetadata, async (req: Request, res: Response) => {
     if (!req.body.scoreID){
         return res.status(400).json({
@@ -164,106 +338,6 @@ app.post("/scores", validateScore, validateScoreMetadata, async (req: Request, r
         data: "Score saved successfully."
     })
 });
-
-app.get("/test", (req : Request, res: Response) => {
-    return res.status(200).json({
-        error: null,
-        data: "Test endpoint working."
-    });
-});
-
-app.get("/username/:name", async (req: Request, res: Response) => {
-    try {
-        const resp = await dynamo_document_client.send(new GetCommand(
-        {
-            TableName : TABLE_NAME,
-            Key : {
-                User_id : `#HANDLE${req.params.name}`,
-                Item_id : "#RESERVED"
-            }
-        }));
-        if (!resp.Item){
-            return res.status(404).json({
-                result: "false",
-                message: "Username not found."
-            })
-        }
-        return res.status(200).json({
-            result: "true",
-            message: "The username \"" + req.params.name + "\" is in use."
-        })
-    } catch (err : any){
-        return res.status(err.$metadata?.httpStatusCode ?? 500).json({
-            error: err.name,
-            message: err.message
-        })
-    }
-})
-
-app.post("/username/:name", async (req: Request, res: Response) => {
-    try {
-        const resp = await dynamo_document_client.send(new PutCommand(
-        {
-            TableName : TABLE_NAME,
-            Item : {
-                User_id : `#HANDLE${req.params.name}`,
-                Item_id : "#RESERVED"
-            },
-            ConditionExpression: "attribute_not_exists(User_id)"
-        }));
-        return res.status(200).json({
-            error: null,
-            data: "Username successfully reserved."
-        })
-    } catch (err : any){
-        if (err.name == "ConditionalCheckFailedException"){
-            return res.status(400).json({
-                error: err.name,
-                data: "The username \"" + req.params.name + "\" is already in use."
-            })
-        }
-        return res.status(err.$metadata?.httpStatusCode ?? 500).json({
-            error: err.name,
-            data: err.message
-        })
-    }
-})
-
-
-
-//
-// TODO
-// NEED TO ONLY ALLOW DELETION OF USERNAME BY THE ACCOUNT ASSOCIATED WITH IT
-
-
-app.delete("/username/:name", async (req : Request, res : Response) => {
-    return res.status(100).json(
-        {
-            error: null,
-            message: "username deletion currently disabled."
-        }
-    )
-    try {
-        const awsResponse = await dynamo_document_client.send(new DeleteCommand({
-            TableName: TABLE_NAME,
-            Key: {
-                User_id: `#HANDLE${req.params.name}`,
-                Item_id: "#RESERVED"
-            }
-        }))
-        return res.status(200).json({
-            error: null,
-            data: "Successfully deleted handle reservation: " + req.params.name,
-
-        })
-    } catch (err : any) {
-        return res.status(err.$metadata?.httpStatusCode ?? 500).json({
-            error: err.name,
-            data: err.message
-        })
-    }
-})
-
 
 // app.delete("/scores:scoreID", async (req: Request, res: Response) => {
     
