@@ -138,15 +138,23 @@ const updateProfileWithNewHandleTransactionBody = (profile: ProfileSchemaType, u
         }
     },
     {
-        Put: {
+        
+        Put: (assertProfileNotExits ? {
             TableName: TABLE_NAME,
             Item: {
                 User_id: userID, 
                 Item_id: "#PROFILE",
                 ...profile
             },
-            ConditionExpression: `${assertProfileNotExits && "attribute_not_exists(User_id)"}`,
-        }
+            ConditionExpression: "attribute_not_exists(User_id)",
+        } : {
+            TableName: TABLE_NAME,
+            Item: {
+                User_id: userID, 
+                Item_id: "#PROFILE",
+                ...profile
+            },
+        })
     }
 ]
 
@@ -210,8 +218,8 @@ app.put("/users/profile", validateProfile, async (req: Request, res: Response) =
             })
         }
 
-        // if no username update needed
-        if (profile.Username === getProfileResponse.Username){
+        // if no username update needed, just the profile
+        if (profile.Username === getProfileResponse.Item.Username){
             // simply put the profile
             await dynamo_document_client.send(new PutCommand({
                 TableName: TABLE_NAME,
@@ -221,20 +229,34 @@ app.put("/users/profile", validateProfile, async (req: Request, res: Response) =
                     ...profile
                 },
             }))
-        } else { // else we are updating the username
+        } else { // else we are updating the username and the profile
+            // check if new username is available
+            const nameCheckResponse = await dynamo_document_client.send(new GetCommand({
+                TableName: TABLE_NAME,
+                Key: {
+                    "User_id": "#HANDLE" + profile.Username,
+                    "Item_id": "#RESERVED"
+                }
+            }))
+            // if the new desired new username is already taken
+            if (!!nameCheckResponse.Item){
+                return res.status(400).json({
+                    error: "Username Taken",
+                    data: "The updated username you provided is already taken"
+                })
+            }
+
+            // delete the old username reservation
+            await dynamo_document_client.send(new DeleteCommand({
+                TableName: TABLE_NAME,
+                Key: {
+                    User_id: "#HANDLE" + getProfileResponse.Item.Username,
+                    Item_id: "#RESERVED"
+                }
+            }))
             
             await dynamo_document_client.send(new TransactWriteCommand({
                 "TransactItems": [
-                    // delete old username reservation
-                    {
-                        Delete: {
-                            TableName: TABLE_NAME,
-                            Key: {
-                                User_id: "#HANDLE" + profile.Username,
-                                Item_id: "#USER_ID" + userID
-                            }
-                        }
-                    },
                     // Create new profile and username reservation
                     ...updateProfileWithNewHandleTransactionBody(profile,userID,false)
                 ]
@@ -245,58 +267,23 @@ app.put("/users/profile", validateProfile, async (req: Request, res: Response) =
             data: "Successfully updated profile."
         })
     } catch (err : any) {
-        if (err.name == "TransactionCanceledException"){
-            let messages : string[] = [];
-            // collect the preexistance of item errors into array
-            err.CancellationReasons.forEach((element : any, index : number) => {
-                if (element.Code == "ConditionalCheckFailed"){
-                    if (index === 1)
-                        messages.push("Username is already in use. ")
-                    else if (index === 2)
-                        messages.push("Profile already exists for this user.")
-                }
-            });
-            return res.status(400).json({
-                error: "Preexistance of username or profile",
-                data: messages
-            })
-        } else {
-            return res.status(500).json({
-                error: err.name,
-                data: err.message
-            })
-        }
-    }
-})
-
-
-//
-// TODO
-// NEED TO ONLY ALLOW DELETION OF USERNAME BY THE ACCOUNT ASSOCIATED WITH IT
-
-// Deletes a username handle.
-app.delete("/username/:name", async (req : Request, res : Response) => {
-    return res.status(500).json(
-        {
-            error: null,
-            message: "username deletion currently disabled. Email:" + res.locals.userEmail
-        }
-    )
-    try {
-        const awsResponse = await dynamo_document_client.send(new DeleteCommand({
-            TableName: TABLE_NAME,
-            Key: {
-                User_id: `#HANDLE${req.params.name}`,
-                Item_id: "#RESERVED"
-            }
-        }))
-        return res.status(200).json({
-            error: null,
-            data: "Successfully deleted handle reservation: " + req.params.name,
-
-        })
-    } catch (err : any) {
-        return res.status(err.$metadata?.httpStatusCode ?? 500).json({
+        // if (err.name == "TransactionCanceledException"){
+        //     let messages : string[] = [];
+        //     // collect the preexistance of item errors into array
+        //     err.CancellationReasons.forEach((element : any, index : number) => {
+        //         if (element.Code == "ConditionalCheckFailed"){
+        //             if (index === 0)
+        //                 messages.push("Username is already in use. ")
+        //             else if (index === 1)
+        //                 messages.push("Profile already exists for this user.")
+        //         }
+        //     });
+        //     return res.status(400).json({
+        //         error: "Preexistance of username or profile",
+        //         data: messages
+        //     })
+        // } 
+        return res.status(500).json({
             error: err.name,
             data: err.message
         })
