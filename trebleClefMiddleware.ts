@@ -7,6 +7,8 @@ const USERNAME_MAX_SIZE = 25
 const SCORE_NAME_MAX_SIZE = 25
 const PRIMARY_GENRE_MAX_SIZE = 25
 const PRIMARY_INSTRUMENT_MAX_SIZE = 25
+const MAX_SCORES_PER_USER = 30
+const MAX_BIO_SIZE = 800
 
 const cognitoVerifier = CognitoJwtVerifier.create({
     userPoolId: process.env.COGNITO_USER_POOL_ID!,
@@ -56,14 +58,12 @@ export function validateScore(req: Request, res: Response, next: Function){
         res.locals.parsedScore = parsed.data as ScoreObject;
         next();
     } else {
-        return res.status(400).json({
+        return res.status(415).json({
             error: "Invalid score.",
-            details: parsed.error.issues
+            data: parsed.error.issues
         })
     }
 }
-
-
 
 
 const ScoreMetadataSchema = z.object({
@@ -91,9 +91,30 @@ export function validateScoreMetadata(req : Request, res: Response, next: Functi
         res.locals.parsedScoreMetadata = parsed.data;
         next();
     } else {
-        return res.status(400).json({
+        return res.status(415).json({
             error: "Invalid score metadata.",
-            details: parsed.error.issues
+            data: parsed.error.issues
         })
     }
+}
+
+const ProfileSchema = z.object({
+    Email: z.string(),
+    Username: z.string().min(1).max(USERNAME_MAX_SIZE),
+    Number_of_scores: z.number().int().nonnegative().max(MAX_SCORES_PER_USER),
+    Bio: z.string().min(1).max(MAX_BIO_SIZE).optional()
+})
+
+export type ProfileSchemaType = z.infer<typeof ProfileSchema>
+
+export function validateProfile(req: Request, res: Response, next: Function){
+    const parsed = ProfileSchema.safeParse(req.body.profile)
+    if (!parsed.success){
+        return res.status(415).json({
+            error: "Invalid profile",
+            data: parsed.error.message
+        })
+    }
+    res.locals.parsedProfile = parsed;
+    next();
 }
