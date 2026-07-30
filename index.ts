@@ -17,7 +17,7 @@
 //  Sort Key: #SCORE<score_id>#META : "S"
 //  Second Sort Key format: #SCORE<score_id>#DATA
 //  Third Sort Key format: #PROFILE
-//  Fourth Sort Key format: #USER_ID<User_id> // used for #HANDLE pk
+//  Fourth Sort Key format: #RESERVED // used for #HANDLE pk
 //
 //
 //  For #META suffix:
@@ -132,7 +132,7 @@ const updateProfileWithNewHandleTransactionBody = (profile: ProfileSchemaType, u
             TableName : TABLE_NAME,
             Item : {
                 User_id : `#HANDLE${profile.Username}`,
-                Item_id : "#USER_ID" + userID
+                Item_id : "#RESERVED"
             },
             ConditionExpression: "attribute_not_exists(User_id)"
         }
@@ -157,19 +157,23 @@ app.post("/users/profile", validateProfile, async (req: Request, res: Response) 
     profile.Number_of_scores = 0;
     
     try {
-        const respone = dynamo_document_client.send(new TransactWriteCommand({
+        const response = await dynamo_document_client.send(new TransactWriteCommand({
             "TransactItems": updateProfileWithNewHandleTransactionBody(profile, userID, true)
         }))
+        return res.status(200).json({
+            error: null,
+            data: "Successfully created profile."
+        })
     } catch (err : any) {
         if (err.name == "TransactionCanceledException"){
             let messages : string[] = [];
             // collect the preexistance of item errors into array
-            err.cancellationReasons.array.forEach((element : any, index : number) => {
+            err.CancellationReasons.forEach((element : any, index : number) => {
                 if (element.Code == "ConditionalCheckFailed"){
                     if (index === 0)
                         messages.push("Username is already in use. ")
                     else if (index === 1)
-                        messages.push("Profile already exists for this user.")
+                        messages.push("Profile already exists for current user.")
                 }
             });
             return res.status(400).json({
@@ -236,12 +240,15 @@ app.put("/users/profile", validateProfile, async (req: Request, res: Response) =
                 ]
             }))
         }
-        const respone = dynamo_document_client.send()
+        return res.status(200).json({
+            error: null,
+            data: "Successfully updated profile."
+        })
     } catch (err : any) {
         if (err.name == "TransactionCanceledException"){
             let messages : string[] = [];
             // collect the preexistance of item errors into array
-            err.cancellationReasons.array.forEach((element : any, index : number) => {
+            err.CancellationReasons.forEach((element : any, index : number) => {
                 if (element.Code == "ConditionalCheckFailed"){
                     if (index === 1)
                         messages.push("Username is already in use. ")
