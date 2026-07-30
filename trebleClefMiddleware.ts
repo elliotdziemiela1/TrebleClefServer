@@ -115,6 +115,6 @@ export function validateProfile(req: Request, res: Response, next: Function){
             data: parsed.error.message
         })
     }
-    res.locals.parsedProfile = parsed;
+    res.locals.parsedProfile = parsed.data;
     next();
 }
