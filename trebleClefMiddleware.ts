@@ -118,3 +118,4 @@ export function validateProfile(req: Request, res: Response, next: Function){
     res.locals.parsedProfile = parsed.data;
     next();
 }
+

@@ -217,6 +217,7 @@ app.put("/users/profile", validateProfile, async (req: Request, res: Response) =
                 Item_id: "#PROFILE"
             }
         }))
+        // if profile doesn't exist, return 404
         if (!getProfileResponse.Item){
             return res.status(404).json({
                 error: "Profile not found.",
@@ -229,6 +230,14 @@ app.put("/users/profile", validateProfile, async (req: Request, res: Response) =
             return res.status(400).json({
                 error: "Disabled Feature",
                 data: "Email changes are currently disabled."
+            })
+        }
+
+        // For now, disable number_of_scores changes
+        if (profile.Number_of_scores !== getProfileResponse.Item.Number_of_scores){
+            return res.status(400).json({
+                error: "Inconsistent Number of Scores",
+                data: "The number of scores you provided does not match your actual number."
             })
         }
 
