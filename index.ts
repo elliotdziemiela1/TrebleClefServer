@@ -218,6 +218,14 @@ app.put("/users/profile", validateProfile, async (req: Request, res: Response) =
             })
         }
 
+        // For now, disable email changes
+        if (profile.Email !== getProfileResponse.Item.Email){
+            return res.status(400).json({
+                error: "Disabled Feature",
+                data: "Email changes are currently disabled."
+            })
+        }
+
         // if no username update needed, just the profile
         if (profile.Username === getProfileResponse.Item.Username){
             // simply put the profile
