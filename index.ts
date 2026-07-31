@@ -82,8 +82,8 @@
 
 import type { Request, Response } from "express";
 import express from "express";
-import { ProfileSchemaType, validateProfile, validateScore, validateScoreMetadata, verifyAuth } from "./trebleClefMiddleware";
-import { z } from "zod";
+import { MAX_SCORES_PER_USER, ProfileSchemaType, validateProfile, validateScore, validateScoreMetadata, verifyAuth } from "./trebleClefMiddleware";
+import zod, { z } from "zod";
 import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import { ReturnValue, ReturnValuesOnConditionCheckFailure, TransactWriteItem } from "@aws-sdk/client-dynamodb";
 
@@ -126,44 +126,73 @@ app.get("/test", (req : Request, res: Response) => {
     });
 });
 
-const updateProfileWithNewHandleTransactionBody = (profile: ProfileSchemaType, userID: string, assertProfileNotExits: boolean) => [
-    {
-        Put: {
-            TableName : TABLE_NAME,
-            Item : {
-                User_id : `#HANDLE${profile.Username}`,
-                Item_id : "#RESERVED"
-            },
-            ConditionExpression: "attribute_not_exists(User_id)"
+const updateProfileWithNewHandleTransactionBody = (profile: ProfileSchemaType, userID: string, assertProfileNotExits: boolean) => {
+    return [
+        {
+            Put: {
+                TableName : TABLE_NAME,
+                Item : {
+                    User_id : `#HANDLE${profile.Username}`,
+                    Item_id : "#RESERVED"
+                },
+                ConditionExpression: "attribute_not_exists(User_id)"
+            }
+        },
+        {
+            
+            Put: (assertProfileNotExits ? {
+                TableName: TABLE_NAME,
+                Item: {
+                    User_id: userID, 
+                    Item_id: "#PROFILE",
+                    ...profile
+                },
+                ConditionExpression: "attribute_not_exists(User_id)",
+            } : {
+                TableName: TABLE_NAME,
+                Item: {
+                    User_id: userID, 
+                    Item_id: "#PROFILE",
+                    ...profile
+                },
+            })
         }
-    },
-    {
-        
-        Put: (assertProfileNotExits ? {
-            TableName: TABLE_NAME,
-            Item: {
-                User_id: userID, 
-                Item_id: "#PROFILE",
-                ...profile
-            },
-            ConditionExpression: "attribute_not_exists(User_id)",
-        } : {
-            TableName: TABLE_NAME,
-            Item: {
-                User_id: userID, 
-                Item_id: "#PROFILE",
-                ...profile
-            },
-        })
+    ]
+}
+
+class ProfileNotFoundError extends Error {
+    $metadata: {
+        httpStatusCode: number
     }
-]
+    constructor(message: string) {
+        super(message);
+        this.name = "ProfileNotFoundError";
+        this.$metadata = {
+            httpStatusCode: 404
+        }
+    }
+}
+
+const getProfileForUserID = async (userID: string) => {
+    const getProfileResponse = await dynamo_document_client.send(new GetCommand({
+            TableName: TABLE_NAME,
+            Key: {
+                User_id: userID,
+                Item_id: "#PROFILE"
+            }
+        }))
+
+        if (!getProfileResponse.Item){
+            throw new ProfileNotFoundError("Profile not found corresponding to logged in user.")
+        }
+        return getProfileResponse;
+}
 
 // creates a user's profile and reserves their desired username.
 app.post("/users/profile", validateProfile, async (req: Request, res: Response) => {
     const profile = res.locals.parsedProfile;
     const userID = res.locals.userId
     profile.Number_of_scores = 0;
-    
     try {
         const response = await dynamo_document_client.send(new TransactWriteCommand({
             "TransactItems": updateProfileWithNewHandleTransactionBody(profile, userID, true)
@@ -209,21 +238,7 @@ app.put("/users/profile", validateProfile, async (req: Request, res: Response) =
     const userID = res.locals.userId
     
     try {
-        // fetch current profile for this userID in db
-        const getProfileResponse = await dynamo_document_client.send(new GetCommand({
-            TableName: TABLE_NAME,
-            Key: {
-                User_id: userID,
-                Item_id: "#PROFILE"
-            }
-        }))
-        // if profile doesn't exist, return 404
-        if (!getProfileResponse.Item){
-            return res.status(404).json({
-                error: "Profile not found.",
-                data: "This profile doesn't exist yet."
-            })
-        }
+        const getProfileResponse = await getProfileForUserID(userID); // will throw error if profile doesn't exist
 
         // For now, disable email changes
         if (profile.Email !== getProfileResponse.Item.Email){
@@ -280,9 +295,7 @@ app.put("/users/profile", validateProfile, async (req: Request, res: Response) =
             
             // Create new profile and username reservation
             await dynamo_document_client.send(new TransactWriteCommand({
-                "TransactItems": [
-                    ...updateProfileWithNewHandleTransactionBody(profile,userID,false)
-                ]
+                "TransactItems": updateProfileWithNewHandleTransactionBody(profile,userID,false)
             }))
 
             //
@@ -292,35 +305,42 @@ app.put("/users/profile", validateProfile, async (req: Request, res: Response) =
             // get all scores owned by this user
             const metaQueryResult = await dynamo_document_client.send(new QueryCommand({
                 TableName: TABLE_NAME,
-                KeyConditionExpression: "PK = :pk AND SK begins_with(:meta)",
+                KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :meta)",
                 ExpressionAttributeValues: {
                     ":pk": userID,
                     ":meta": "#META" 
                 },
-                ProjectionExpression: "SK",
+                ProjectionExpression: "#sk",
+                ExpressionAttributeNames: {
+                    "#pk": "User_id",
+                    "#sk": "Item_id"
+                }
             }))
 
-            // Change the author name of all such scores
-            await dynamo_document_client.send(new TransactWriteCommand({
-                ...(metaQueryResult.Items?.forEach((itm : any) => {
-                    return {
-                        Update: {
-                            TableName: TABLE_NAME,
-                            Key: {
-                                "User_id": userID,
-                                "Item_id": itm.Item_id
-                            },
-                            UpdateExpression: "SET #authorName = :authorName",
-                            ExpressionAttributeNames: {
-                                "#authorName": "Author_name"
-                            },
-                            ExpressionAttributeValues: {
-                                ":authorName": profile.Username
+            // if there are any scores, update their author names to the new username
+            if (metaQueryResult.Count > 0){
+                // Change the author name of all such scores
+                await dynamo_document_client.send(new TransactWriteCommand({
+                    TransactItems: (metaQueryResult.Items?.forEach((itm : any) => {
+                        return {
+                            Update: {
+                                TableName: TABLE_NAME,
+                                Key: {
+                                    "User_id": userID,
+                                    "Item_id": itm.Item_id
+                                },
+                                UpdateExpression: "SET #authorName = :authorName",
+                                ExpressionAttributeNames: {
+                                    "#authorName": "Author_name"
+                                },
+                                ExpressionAttributeValues: {
+                                    ":authorName": profile.Username
+                                }
                             }
                         }
-                    }
+                    }))
                 }))
-            }))
+            }
             
         }
         return res.status(200).json({

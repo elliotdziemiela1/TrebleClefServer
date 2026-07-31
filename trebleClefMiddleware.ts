@@ -7,7 +7,7 @@ const USERNAME_MAX_SIZE = 25
 const SCORE_NAME_MAX_SIZE = 25
 const PRIMARY_GENRE_MAX_SIZE = 25
 const PRIMARY_INSTRUMENT_MAX_SIZE = 25
-const MAX_SCORES_PER_USER = 20
+export const MAX_SCORES_PER_USER = 20
 const MAX_BIO_SIZE = 800
 
 const cognitoVerifier = CognitoJwtVerifier.create({
