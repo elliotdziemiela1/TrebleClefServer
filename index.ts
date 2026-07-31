@@ -197,6 +197,12 @@ app.post("/users/profile", validateProfile, async (req: Request, res: Response) 
     }
 })
 
+
+//
+// TODO
+// when updating username, need to update the author name of all scores for this user.
+//
+
 // updates a user's profile.
 app.put("/users/profile", validateProfile, async (req: Request, res: Response) => {
     const profile = res.locals.parsedProfile;
@@ -263,34 +269,56 @@ app.put("/users/profile", validateProfile, async (req: Request, res: Response) =
                 }
             }))
             
+            // Create new profile and username reservation
             await dynamo_document_client.send(new TransactWriteCommand({
                 "TransactItems": [
-                    // Create new profile and username reservation
                     ...updateProfileWithNewHandleTransactionBody(profile,userID,false)
                 ]
             }))
+
+            //
+            // change author name for all scores owned by this user
+            // 
+            
+            // get all scores owned by this user
+            const metaQueryResult = await dynamo_document_client.send(new QueryCommand({
+                TableName: TABLE_NAME,
+                KeyConditionExpression: "PK = :pk AND SK begins_with(:meta)",
+                ExpressionAttributeValues: {
+                    ":pk": userID,
+                    ":meta": "#META" 
+                },
+                ProjectionExpression: "SK",
+            }))
+
+            // Change the author name of all such scores
+            await dynamo_document_client.send(new TransactWriteCommand({
+                ...(metaQueryResult.Items?.forEach((itm : any) => {
+                    return {
+                        Update: {
+                            TableName: TABLE_NAME,
+                            Key: {
+                                "User_id": userID,
+                                "Item_id": itm.Item_id
+                            },
+                            UpdateExpression: "SET #authorName = :authorName",
+                            ExpressionAttributeNames: {
+                                "#authorName": "Author_name"
+                            },
+                            ExpressionAttributeValues: {
+                                ":authorName": profile.Username
+                            }
+                        }
+                    }
+                }))
+            }))
+            
         }
         return res.status(200).json({
             error: null,
             data: "Successfully updated profile."
         })
     } catch (err : any) {
-        // if (err.name == "TransactionCanceledException"){
-        //     let messages : string[] = [];
-        //     // collect the preexistance of item errors into array
-        //     err.CancellationReasons.forEach((element : any, index : number) => {
-        //         if (element.Code == "ConditionalCheckFailed"){
-        //             if (index === 0)
-        //                 messages.push("Username is already in use. ")
-        //             else if (index === 1)
-        //                 messages.push("Profile already exists for this user.")
-        //         }
-        //     });
-        //     return res.status(400).json({
-        //         error: "Preexistance of username or profile",
-        //         data: messages
-        //     })
-        // } 
         return res.status(500).json({
             error: err.name,
             data: err.message
