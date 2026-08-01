@@ -9,5 +9,5 @@
     "esModuleInterop": true,
     "skipLibCheck": true
   },
-  "include": ["*.ts"]
+  "include": ["*.ts", "routes/*.ts", "middleware/trebleClefMiddleware.ts", "utilities/utilities.ts"]
 }

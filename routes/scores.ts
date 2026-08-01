@@ -1,0 +1,216 @@
+import {Router, Request, Response} from "express"
+import zod from "zod"
+import { validateScore, validateScoreMetadata, MAX_SCORES_PER_USER } from "../middleware/trebleClefMiddleware"
+import { dynamo_document_client, TABLE_NAME } from "../index"
+import { TransactWriteCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { getProfileForUserID} from "../utilities/utilities.js"
+
+const router = Router();
+
+
+router.post("/", validateScore, validateScoreMetadata, async (req: Request, res: Response) => {
+    if (!req.body.scoreID){
+        return res.status(400).json({
+            error: "Missing scoreID.",
+            data: "You must provide a scoreID for the score you are trying to save."
+        })
+    }
+
+    // validate score id
+    if (!zod.uuidv4().safeParse(req.body.scoreID).success){
+        return res.status(400).json({
+            error: "Invalid scoreID.",
+            data: "The scoreID you provided is not a valid UUIDv4."
+        })
+    }
+
+    try {
+
+        // get current user's profile to check if they have exceeded their max number of scores
+        const getProfileResponse = await getProfileForUserID(res.locals.userId); // will throw error if profile doesn't exist
+
+        if (getProfileResponse.Item.Number_of_scores >= MAX_SCORES_PER_USER){
+            return res.status(400).json({
+                error: "Max number of scores reached.",
+                data: "You have reached the maximum number of scores allowed for your account."
+            })
+        }
+
+        // check that provided author name matches the author name of the user's profile
+        if (res.locals.parsedScoreMetadata.Author_name !== getProfileResponse.Item.Username){
+            return res.status(400).json({
+                error: "Author name mismatch.",
+                data: "The author name provided in the score metadata does not match your profile."
+            })
+        }
+        
+        await dynamo_document_client.send( new TransactWriteCommand({
+            "TransactItems": [
+                {
+                    Put: {
+                        TableName: TABLE_NAME,
+                        Item: {
+                            User_id: res.locals.userId,
+                            Item_id: `#SCORE${req.body.scoreID}#META`,
+                            ...res.locals.parsedScoreMetadata
+                        },
+                        ConditionExpression: "attribute_not_exists(#User_id) AND attribute_not_exists(#Item_id)",
+                        ExpressionAttributeNames: {
+                            "#User_id": "User_id",
+                            "#Item_id": "Item_id"
+                        }
+                    },
+                },
+                {
+                    Put: {
+                        TableName: TABLE_NAME,
+                        Item: {
+                            User_id: res.locals.userId,
+                            Item_id: `#SCORE${req.body.scoreID}#DATA`,
+                            ...res.locals.parsedScore
+                        },
+                        ConditionExpression: "attribute_not_exists(#User_id) AND attribute_not_exists(#Item_id)",
+                        ExpressionAttributeNames: {
+                            "#User_id": "User_id",
+                            "#Item_id": "Item_id"
+                        }
+                    },
+                }
+            ]
+        }))
+
+        // increment the user's number of scores
+        await dynamo_document_client.send(new UpdateCommand({
+            TableName: TABLE_NAME,
+            Key: {
+                User_id: res.locals.userId,
+                Item_id: "#PROFILE"
+            },
+            UpdateExpression: "SET #numScores = #numScores + :inc",
+            ExpressionAttributeNames: {
+                "#numScores": "Number_of_scores"
+            },
+            ExpressionAttributeValues: {
+                ":inc": 1
+            }
+        }))
+    } catch (err : any){
+        if (err.name == "TransactionCanceledException"){
+            let messages : string[] = [];
+            // collect the preexistance of item errors into array
+            err.CancellationReasons.forEach((element : any, index : number) => {
+                if (element.Code == "ConditionalCheckFailed"){
+                    if (index === 0)
+                        messages.push("A score metadata item with this scoreID already exists for this user.");
+                    if (index === 1)
+                        messages.push("A score data item with this scoreID already exists for this user.");
+                }
+            });
+            return res.status(400).json({
+                error: "Score with this id already exists for this user.",
+                data: messages.join(" ")
+            })
+        }
+        return res.status(err.$metadata?.httpStatusCode ?? 500).json({
+            error: err.name,
+            data: err.message
+        })
+    }
+
+    return res.status(200).json({
+        error: null,
+        data: "Score saved successfully."
+    })
+});
+
+router.put("/", validateScore, validateScoreMetadata, async (req: Request, res: Response) => {
+    if (!req.body.scoreID){
+        return res.status(400).json({
+            error: "Missing scoreID.",
+            data: "You must provide a scoreID for the score you are trying to save."
+        })
+    }
+
+    // validate score id
+    if (!zod.uuidv4().safeParse(req.body.scoreID).success){
+        return res.status(400).json({
+            error: "Invalid scoreID.",
+            data: "The scoreID you provided is not a valid UUIDv4."
+        })
+    }
+
+    try {
+        // check that provided author name matches the author name of the user's profile
+        const getProfileResponse = await getProfileForUserID(res.locals.userId); // will throw error if profile doesn't exist
+
+        if (res.locals.parsedScoreMetadata.Author_name !== getProfileResponse.Item.Username){
+            return res.status(400).json({
+                error: "Author name mismatch.",
+                data: "The author name provided in the score metadata does not match your profile."
+            })
+        }
+
+        await dynamo_document_client.send( new TransactWriteCommand({
+            "TransactItems": [
+                {
+                    Put: {
+                        TableName: TABLE_NAME,
+                        Item: {
+                            User_id: res.locals.userId,
+                            Item_id: `#SCORE${req.body.scoreID}#META`,
+                            ...res.locals.parsedScoreMetadata
+                        },
+                        ConditionExpression: "attribute_exists(#User_id) AND attribute_exists(#Item_id)",
+                        ExpressionAttributeNames: {
+                            "#User_id": "User_id",
+                            "#Item_id": "Item_id"
+                        }
+                    },
+                },
+                {
+                    Put: {
+                        TableName: TABLE_NAME,
+                        Item: {
+                            User_id: res.locals.userId,
+                            Item_id: `#SCORE${req.body.scoreID}#DATA`,
+                            ...res.locals.parsedScore
+                        },
+                        ConditionExpression: "attribute_exists(#User_id) AND attribute_exists(#Item_id)",
+                        ExpressionAttributeNames: {
+                            "#User_id": "User_id",
+                            "#Item_id": "Item_id"
+                        }
+                    },
+                }
+            ]
+        }))
+    } catch (err : any){
+        if (err.name == "TransactionCanceledException"){
+            let messages : string[] = [];
+            // collect the preexistance of item errors into array
+            err.CancellationReasons.forEach((element : any, index : number) => {
+                if (element.Code == "ConditionalCheckFailed"){
+                    if (index === 0)
+                        messages.push("A score metadata item with this scoreID does not exist for this user.");
+                    if (index === 1)
+                        messages.push("A score data item with this scoreID does not exist for this user.");
+                }
+            });
+            return res.status(400).json({
+                error: "Score not found.",
+                data: messages.join(" ")
+            })
+        }
+        return res.status(err.$metadata?.httpStatusCode ?? 500).json({
+            error: err.name,
+            data: err.message
+        })
+    }
+
+    return res.status(200).json({
+        error: null,
+        data: "Score saved successfully."
+    })
+});
+
+export default router;
