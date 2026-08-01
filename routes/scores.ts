@@ -213,4 +213,83 @@ router.put("/", validateScore, validateScoreMetadata, async (req: Request, res: 
     })
 });
 
+router.delete("/:scoreID", async (req: Request, res: Response) => {
+    if (!req.params.scoreID){
+        return res.status(400).json({
+            error: "Missing scoreID",
+            data: "You must provide a scoreID in the request parameters."
+        })
+    }
+    // send a delete transaction to delete both the score metadata and score data items for this user
+    // Also, decrement the user's number of scores in their profile item
+    try {
+        await dynamo_document_client.send(new TransactWriteCommand({
+            TransactItems: [
+                // delete score metadata
+                {
+                    Delete: {
+                        TableName: TABLE_NAME,
+                        Key: {
+                            User_id: res.locals.userId,
+                            Item_id: `#SCORE${req.params.scoreID}#META`
+                        }
+                    }
+                },
+                // delete score data
+                {
+                    Delete: {
+                        TableName: TABLE_NAME,
+                        Key: {
+                            User_id: res.locals.userId,
+                            Item_id: `#SCORE${req.params.scoreID}#DATA`
+                        },
+                        ConditionExpression: "attribute_exists(#User_id) AND attribute_exists(#Item_id)",
+                        ExpressionAttributeNames: {
+                            "#User_id": "User_id",
+                            "#Item_id": "Item_id"
+                        }
+                    }
+                },
+                // update user profile to decrement number of scores
+                {
+                    Update: {
+                        TableName: TABLE_NAME,
+                        Key: {
+                            User_id: res.locals.userId,
+                            Item_id: "#PROFILE"
+                        },
+                        UpdateExpression: "SET #numScores = #numScores - :dec",
+                        ExpressionAttributeNames: {
+                            "#numScores": "Number_of_scores"
+                        },
+                        ExpressionAttributeValues: {
+                            ":dec": 1
+                        }
+                    }
+                }
+            ]
+        }))
+
+        res.status(200).json({
+            error: null,
+            data: "Score deleted successfully."
+        })
+    } catch (err : any) {
+        if (err.name == "TransactionCanceledException"){
+            let messages : string[] = [];
+            // collect the preexistance of item errors into array
+            if (!!err.CancellationReasons[1] && err.CancellationReasons[1].Code == "ConditionalCheckFailed"){
+                messages.push("A score data item with this scoreID does not exist for this user.");
+            }
+            return res.status(400).json({
+                error: "Score not found.",
+                data: messages.join(" ")
+            })
+        }
+        return res.status(err.$metadata?.httpStatusCode ?? 500).json({
+            error: err.name,
+            data: err.message
+        })
+    }
+})
 export default router;
