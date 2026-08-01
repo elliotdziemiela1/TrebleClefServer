@@ -79,7 +79,11 @@
 //  Projected Attribute : Secondary Genres : "SS"
 //  Partition Key of user_id will automatically be projected
 //  Sort key containing score_id will automatically be projected
-
+//
+//
+// I could restructre the sort keys so that instead of #SCORE<score_id>#META and #SCORE<score_id>#DATA, 
+// I could have #SCORE#META<score_id> and #SCORE#DATA<score_id>. This would allow me to query for just meta or 
+// just data instead of having to fetch all those items and filter them myself.
 
 import type { Request, Response } from "express";
 import express from "express";

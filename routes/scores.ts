@@ -2,12 +2,12 @@ import {Router, Request, Response} from "express"
 import zod from "zod"
 import { validateScore, validateScoreMetadata, MAX_SCORES_PER_USER } from "../middleware/trebleClefMiddleware"
 import { dynamo_document_client, TABLE_NAME } from "../index"
-import { GetCommand, TransactWriteCommand, TransactGetCommand,UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { QueryCommand, TransactWriteCommand, TransactGetCommand,UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { getProfileForUserID} from "../utilities/utilities.js"
 
 const router = Router();
 
-router.get("/:scoreID", async (req: Request, res: Response) => {
+router.get("/getScore/:scoreID", async (req: Request, res: Response) => {
     const scoreID = req.params.scoreID;
     try {
         const scoreResponse = await dynamo_document_client.send(new TransactGetCommand({
@@ -56,6 +56,54 @@ router.get("/:scoreID", async (req: Request, res: Response) => {
         return res.status(500).json({
             error: err.message,
             data: null
+        })
+    }
+})
+
+router.get("/allMyScoreMetadatas", async (req: Request, res: Response) => {
+    try {
+        const getAllScoresResponse = await dynamo_document_client.send(new QueryCommand({
+            TableName: TABLE_NAME,
+            KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :score)",
+            ProjectionExpression: "Item_id, Author_name, #Name, Primary_genre, Primary_instrument, Secondary_instruments, " +
+            "Secondary_genres, Popularity_score, Number_of_ratings, Total_number_of_stars, Date_time_created, " +
+            "BPM, Total_measures",
+            ExpressionAttributeNames: {
+                "#pk": "User_id",
+                "#sk": "Item_id",
+                "#Name": "Name"
+            },
+            ExpressionAttributeValues: {
+                ":pk": res.locals.userId,
+                ":score": "#SCORE",
+            },
+        }))
+        if (getAllScoresResponse.Count == 0){
+            return res.status(404).json({
+                error: "No scores found.",
+                data: "No scores found for this user."
+            })
+        }
+        const filteredItems = getAllScoresResponse.Items?.filter((item : any) => {
+            if (item.Item_id.endsWith("#META")) {
+                return true;
+            }
+            return false;
+        })
+        return res.status(200).json({
+            error: null,
+            data: filteredItems
+        })
+    } catch (err : any) {
+        if (err.name == "ResourceNotFoundException"){
+            return res.status(404).json({
+                error: "User profile not found.",
+                data: "No profile found for this user. Please create a profile first."
+            })
+        }
+        return res.status(500).json({
+            error: "An error has occurred while retrieving your scores.",
+            data: err.message
         })
     }
 })
