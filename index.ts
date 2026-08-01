@@ -8,6 +8,7 @@
 // We also want to view popular scores for a genre. For that we need a GSI with PK = primary genre, and SK = popularity
 // We also want to view popular scores for an instrument. For that we need a GSI with PK = primary instrument,
 // and SK = popularity
+// We also want to view scores by author name. For that we need a GSI with PK = author name, and SK = popularity
 // For usernames, we will add a new PK type #HANDLE<username> with SK #RESERVED that signifies that a username is in use.
 // When deleting a user or changing their username, we will query the table for their handle and delete the item.
 //

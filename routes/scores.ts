@@ -2,10 +2,63 @@ import {Router, Request, Response} from "express"
 import zod from "zod"
 import { validateScore, validateScoreMetadata, MAX_SCORES_PER_USER } from "../middleware/trebleClefMiddleware"
 import { dynamo_document_client, TABLE_NAME } from "../index"
-import { TransactWriteCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, TransactWriteCommand, TransactGetCommand,UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { getProfileForUserID} from "../utilities/utilities.js"
 
 const router = Router();
+
+router.get("/:scoreID", async (req: Request, res: Response) => {
+    const scoreID = req.params.scoreID;
+    try {
+        const scoreResponse = await dynamo_document_client.send(new TransactGetCommand({
+            TransactItems: [
+                {
+                    Get: {
+                        TableName: TABLE_NAME,
+                        Key: {
+                            User_id: res.locals.userId,
+                            Item_id: `#SCORE${scoreID}#META`
+                        },
+                        ProjectionExpression: "Author_name, #Name, Primary_genre, Primary_instrument, Secondary_instruments, " +
+                        "Secondary_genres, Popularity_score, Number_of_ratings, Total_number_of_stars, DateTime_created, " +
+                        "BPM, Total_measures",
+                        ExpressionAttributeNames: {
+                            "#Name": "Name"
+                        },
+                    }
+                },
+                {
+                    Get: {
+                        TableName: TABLE_NAME,
+                        Key: {
+                            User_id: res.locals.userId,
+                            Item_id: `#SCORE${scoreID}#DATA`
+                        },
+                        ProjectionExpression: "measures, clef"
+                    }
+                }
+            ]
+        }))
+        if (scoreResponse.Responses.length < 2 || !scoreResponse.Responses[0].Item || !scoreResponse.Responses[1].Item){
+            return res.status(404).json({
+                error: "Score not found.",
+                data: `No score with this id found for this user.`
+            })
+        }
+        return res.status(200).json({
+            error: null,
+            data: {
+                metadata: scoreResponse.Responses[0].Item,
+                score: scoreResponse.Responses[1].Item
+            }
+        })
+    } catch (err : any) {
+        return res.status(500).json({
+            error: err.message,
+            data: null
+        })
+    }
+})
 
 
 router.post("/", validateScore, validateScoreMetadata, async (req: Request, res: Response) => {
