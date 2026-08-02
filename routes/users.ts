@@ -170,10 +170,10 @@ router.put("/profile", validateProfile, async (req: Request, res: Response) => {
             // get all scores owned by this user
             let metaQueryResult = await dynamo_document_client.send(new QueryCommand({
                 TableName: TABLE_NAME,
-                KeyConditionExpression: "(#pk = :pk) AND (begins_with(#sk, :score))",
+                KeyConditionExpression: "(#pk = :pk) AND (begins_with(#sk, :scoreMeta))",
                 ExpressionAttributeValues: {
                     ":pk": userID,
-                    ":score": "#SCORE"
+                    ":scoreMeta": "#SCORE#META"
                 },
                 ProjectionExpression: "#sk",
                 ExpressionAttributeNames: {
@@ -186,12 +186,7 @@ router.put("/profile", validateProfile, async (req: Request, res: Response) => {
 
             // if there are any scores, update their author names to the new username
             if (metaQueryResult.Count > 0){
-                // isolate the metadata entries from the score data entries
-                let metaItems = metaQueryResult.Items?.filter((itm : any) =>
-                        itm.Item_id.slice(itm.Item_id.length - "#META".length) == "#META"
-                )
-
-                const transacts = (metaItems.map((itm : any) => {
+                const transacts = (metaQueryResult.Items.map((itm : any) => {
                         return {
                             Update: {
                                 TableName: TABLE_NAME,

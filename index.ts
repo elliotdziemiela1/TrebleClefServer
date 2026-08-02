@@ -15,8 +15,8 @@
 // Main Table:
 //  Partition key: user_id : "S"
 //  Second PK format: #HANDLE<username>
-//  Sort Key: #SCORE<score_id>#META : "S"
-//  Second Sort Key format: #SCORE<score_id>#DATA
+//  Sort Key: #SCORE#META<score_id> : "S"
+//  Second Sort Key format: #SCORE#DATA<score_id>
 //  Third Sort Key format: #PROFILE
 //  Fourth Sort Key format: #RESERVED // used for #HANDLE pk
 //
@@ -80,12 +80,6 @@
 //  Partition Key of user_id will automatically be projected
 //  Sort key containing score_id will automatically be projected
 //
-//
-// TODO
-//
-// I could restructre the sort keys so that instead of #SCORE<score_id>#META and #SCORE<score_id>#DATA, 
-// I could have #SCORE#META<score_id> and #SCORE#DATA<score_id>. This would allow me to query for just meta or 
-// just data instead of having to fetch all those items and filter them myself.
 //
 // TODO
 // I should check that eventually consistent reads are only used where permitted

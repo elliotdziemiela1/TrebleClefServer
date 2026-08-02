@@ -17,7 +17,7 @@ router.get("/getScore/:scoreID", async (req: Request, res: Response) => {
                         TableName: TABLE_NAME,
                         Key: {
                             User_id: res.locals.userId,
-                            Item_id: `#SCORE${scoreID}#META`
+                            Item_id: `#SCORE#META${scoreID}`
                         },
                         ProjectionExpression: "Author_name, #Name, Primary_genre, Primary_instrument, Secondary_instruments, " +
                         "Secondary_genres, Popularity_score, Number_of_ratings, Total_number_of_stars, DateTime_created, " +
@@ -32,7 +32,7 @@ router.get("/getScore/:scoreID", async (req: Request, res: Response) => {
                         TableName: TABLE_NAME,
                         Key: {
                             User_id: res.locals.userId,
-                            Item_id: `#SCORE${scoreID}#DATA`
+                            Item_id: `#SCORE#DATA${scoreID}`
                         },
                         ProjectionExpression: "measures, clef"
                     }
@@ -64,7 +64,7 @@ router.get("/allMyScoreMetadatas", async (req: Request, res: Response) => {
     try {
         const getAllScoresResponse = await dynamo_document_client.send(new QueryCommand({
             TableName: TABLE_NAME,
-            KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :score)",
+            KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :scoreMeta)",
             ProjectionExpression: "Item_id, Author_name, #Name, Primary_genre, Primary_instrument, Secondary_instruments, " +
             "Secondary_genres, Popularity_score, Number_of_ratings, Total_number_of_stars, Date_time_created, " +
             "BPM, Total_measures",
@@ -75,7 +75,7 @@ router.get("/allMyScoreMetadatas", async (req: Request, res: Response) => {
             },
             ExpressionAttributeValues: {
                 ":pk": res.locals.userId,
-                ":score": "#SCORE",
+                ":scoreMeta": "#SCORE#META",
             },
         }))
         if (getAllScoresResponse.Count == 0){
@@ -84,11 +84,12 @@ router.get("/allMyScoreMetadatas", async (req: Request, res: Response) => {
                 data: "No scores found for this user."
             })
         }
-        const filteredItems = getAllScoresResponse.Items?.filter((item : any) => {
-            if (item.Item_id.endsWith("#META")) {
-                return true;
+        let filteredItems = getAllScoresResponse.Items?.map((item : any) => {
+            const scoreID = item.Item_id.slice("#SCORE#META".length);
+            return {
+                scoreID: scoreID,
+                ...item
             }
-            return false;
         })
         return res.status(200).json({
             error: null,
@@ -152,7 +153,7 @@ router.post("/", validateScore, validateScoreMetadata, async (req: Request, res:
                         TableName: TABLE_NAME,
                         Item: {
                             User_id: res.locals.userId,
-                            Item_id: `#SCORE${req.body.scoreID}#META`,
+                            Item_id: `#SCORE#META${req.body.scoreID}`,
                             ...res.locals.parsedScoreMetadata
                         },
                         ConditionExpression: "attribute_not_exists(#User_id) AND attribute_not_exists(#Item_id)",
@@ -167,7 +168,7 @@ router.post("/", validateScore, validateScoreMetadata, async (req: Request, res:
                         TableName: TABLE_NAME,
                         Item: {
                             User_id: res.locals.userId,
-                            Item_id: `#SCORE${req.body.scoreID}#DATA`,
+                            Item_id: `#SCORE#DATA${req.body.scoreID}`,
                             ...res.locals.parsedScore
                         },
                         ConditionExpression: "attribute_not_exists(#User_id) AND attribute_not_exists(#Item_id)",
@@ -258,7 +259,7 @@ router.put("/", validateScore, validateScoreMetadata, async (req: Request, res: 
                         TableName: TABLE_NAME,
                         Item: {
                             User_id: res.locals.userId,
-                            Item_id: `#SCORE${req.body.scoreID}#META`,
+                            Item_id: `#SCORE#META${req.body.scoreID}`,
                             ...res.locals.parsedScoreMetadata
                         },
                         ConditionExpression: "attribute_exists(#User_id) AND attribute_exists(#Item_id)",
@@ -273,7 +274,7 @@ router.put("/", validateScore, validateScoreMetadata, async (req: Request, res: 
                         TableName: TABLE_NAME,
                         Item: {
                             User_id: res.locals.userId,
-                            Item_id: `#SCORE${req.body.scoreID}#DATA`,
+                            Item_id: `#SCORE#DATA${req.body.scoreID}`,
                             ...res.locals.parsedScore
                         },
                         ConditionExpression: "attribute_exists(#User_id) AND attribute_exists(#Item_id)",
@@ -332,7 +333,7 @@ router.delete("/:scoreID", async (req: Request, res: Response) => {
                         TableName: TABLE_NAME,
                         Key: {
                             User_id: res.locals.userId,
-                            Item_id: `#SCORE${req.params.scoreID}#META`
+                            Item_id: `#SCORE#META${req.params.scoreID}`
                         }
                     }
                 },
@@ -342,7 +343,7 @@ router.delete("/:scoreID", async (req: Request, res: Response) => {
                         TableName: TABLE_NAME,
                         Key: {
                             User_id: res.locals.userId,
-                            Item_id: `#SCORE${req.params.scoreID}#DATA`
+                            Item_id: `#SCORE#DATA${req.params.scoreID}`
                         },
                         ConditionExpression: "attribute_exists(#User_id) AND attribute_exists(#Item_id)",
                         ExpressionAttributeNames: {
