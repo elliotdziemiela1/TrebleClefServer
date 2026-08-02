@@ -20,8 +20,8 @@ router.get("/getScore/:scoreID", async (req: Request, res: Response) => {
                             Item_id: `#SCORE#META${scoreID}`
                         },
                         ProjectionExpression: "Author_name, #Name, Primary_genre, Primary_instrument, Secondary_instruments, " +
-                        "Secondary_genres, Popularity_score, Number_of_ratings, Total_number_of_stars, DateTime_created, " +
-                        "BPM, Total_measures",
+                        "Secondary_genres, Popularity_score, Number_of_ratings, Total_number_of_stars, Date_time_created, " +
+                        "Date_time_last_edited, BPM, Total_measures",
                         ExpressionAttributeNames: {
                             "#Name": "Name"
                         },
@@ -67,7 +67,7 @@ router.get("/allMyScoreMetadatas", async (req: Request, res: Response) => {
             KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :scoreMeta)",
             ProjectionExpression: "Item_id, Author_name, #Name, Primary_genre, Primary_instrument, Secondary_instruments, " +
             "Secondary_genres, Popularity_score, Number_of_ratings, Total_number_of_stars, Date_time_created, " +
-            "BPM, Total_measures",
+            "Date_time_last_edited, BPM, Total_measures",
             ExpressionAttributeNames: {
                 "#pk": "User_id",
                 "#sk": "Item_id",
