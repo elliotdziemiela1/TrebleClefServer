@@ -117,7 +117,7 @@ export const dynamo_document_client = DynamoDBDocumentClient.from(dynamo_client)
 
 
 const app = express();
-app.use(cors({origin: ["http://localhost:5173", "https://treble-clef.vercel.app"], credentials: true}))
+app.use(cors({origin: ["http://localhost:5173", "https://treble-clef.vercel.app", "https://treble-clef.vercel.app/"], credentials: true}))
 app.use(express.json());
 app.use(verifyAuth);
 
