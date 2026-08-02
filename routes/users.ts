@@ -41,6 +41,22 @@ const updateProfileWithNewHandleTransactionBody = (profile: ProfileSchemaType, u
     ]
 }
 
+router.get("/profile", async (req: Request, res: Response) => {
+    const userID = res.locals.userId
+    try {
+        const profileResponse = await getProfileForUserID(userID);
+        return res.status(200).json({
+            error: null,
+            data: profileResponse.Item
+        });
+    } catch (err: any) {
+        return res.status(err.$metadata?.httpStatusCode ?? 500).json({
+            error: err.name,
+            data: err.message
+        });
+    }
+});
+
 
 // creates a user's profile and reserves their desired username.
 router.post("/profile", validateProfile, async (req: Request, res: Response) => {
