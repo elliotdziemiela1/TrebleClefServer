@@ -81,9 +81,15 @@
 //  Sort key containing score_id will automatically be projected
 //
 //
+// TODO
+//
 // I could restructre the sort keys so that instead of #SCORE<score_id>#META and #SCORE<score_id>#DATA, 
 // I could have #SCORE#META<score_id> and #SCORE#DATA<score_id>. This would allow me to query for just meta or 
 // just data instead of having to fetch all those items and filter them myself.
+//
+// TODO
+// I should check that eventually consistent reads are only used where permitted
+
 
 import type { Request, Response } from "express";
 import express from "express";

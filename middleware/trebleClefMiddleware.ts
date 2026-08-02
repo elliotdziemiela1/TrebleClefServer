@@ -102,7 +102,7 @@ const ProfileSchema = z.object({
     Email: z.string(),
     Username: z.string().min(1).max(USERNAME_MAX_SIZE),
     Number_of_scores: z.number().int().nonnegative().max(MAX_SCORES_PER_USER),
-    Bio: z.string().min(1).max(MAX_BIO_SIZE).optional()
+    Bio: z.string().min(0).max(MAX_BIO_SIZE).optional()
 })
 
 export type ProfileSchemaType = z.infer<typeof ProfileSchema>
