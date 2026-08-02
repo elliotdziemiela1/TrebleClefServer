@@ -134,6 +134,9 @@ app.get("/test", (req : Request, res: Response) => {
     });
 });
 
+if (process.env.NODE_ENV !== "production"){
+    app.listen(3000, () => console.log("Server is up on port 3000"));
+}
 
-app.listen(3000, () => console.log("Server is up on port 3000"));
+export default app;
 
